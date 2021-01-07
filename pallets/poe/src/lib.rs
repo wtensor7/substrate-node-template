@@ -2,11 +2,16 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
 use frame_support::{
-	decl_module, decl_storage, decl_event, decl_error, ensure, StorageMap
+	decl_module, decl_storage, decl_event, decl_error, ensure, StorageMap,dispatch
 };
 use frame_system::ensure_signed;
 use sp_std::vec::Vec;
 
+#[cfg(test)]
+mod mock;
+
+#[cfg(test)]
+mod tests;
 
 /// Configure the pallet by specifying the parameters and types on which it depends.
 pub trait Trait: frame_system::Trait {
@@ -23,6 +28,9 @@ decl_event! {
         ClaimCreated(AccountId, Vec<u8>),
         /// Event emitted when a claim is revoked by the owner. [who, claim]
         ClaimRevoked(AccountId, Vec<u8>),
+
+        //Event emitted when a claim is transfer[who, claim, dest]
+        ClaimTransfer(AccountId, Vec<u8>, AccountId),
     }
 }
 
@@ -37,6 +45,9 @@ decl_error! {
         NoSuchProof,
         /// The proof is claimed by another account, so caller can't revoke it.
         NotProofOwner,
+        // The proof not found 
+        ClaimNotExist,
+        ProofTooLong,
     }
 }
 
@@ -65,7 +76,9 @@ decl_module! {
 
         /// Allow a user to claim ownership of an unclaimed proof.
         #[weight = 10_000]
-        fn create_claim(origin, proof: Vec<u8>) {
+        fn create_claim(origin, proof: Vec<u8>) -> dispatch::DispatchResult{
+
+            ensure!(proof.len() < 5, Error::<T>::ProofTooLong);
             // Check that the extrinsic was signed and get the signer.
             // This function will return an error if the extrinsic is not signed.
             // https://substrate.dev/docs/en/knowledgebase/runtime/origin
@@ -82,11 +95,13 @@ decl_module! {
 
             // Emit an event that the claim was created.
             Self::deposit_event(RawEvent::ClaimCreated(sender, proof));
+
+            Ok(())
         }
 
         /// Allow the owner to revoke their claim.
         #[weight = 10_000]
-        fn revoke_claim(origin, proof: Vec<u8>) {
+        fn revoke_claim(origin, proof: Vec<u8>) -> dispatch::DispatchResult{
             // Check that the extrinsic was signed and get the signer.
             // This function will return an error if the extrinsic is not signed.
             // https://substrate.dev/docs/en/knowledgebase/runtime/origin
@@ -106,6 +121,24 @@ decl_module! {
 
             // Emit an event that the claim was erased.
             Self::deposit_event(RawEvent::ClaimRevoked(sender, proof));
+            Ok(())
+        }
+
+        #[weight = 0]
+        fn transfer_claim(origin, claim: Vec<u8>, dest: T::AccountId) -> dispatch::DispatchResult {
+            let sender = ensure_signed(origin)?;
+
+            ensure!(Proofs::<T>::contains_key(&claim), Error::<T>::ClaimNotExist);
+
+            let (owner, _block_number) = Proofs::<T>::get(&claim);
+
+            ensure!(owner == sender, Error::<T>::NotProofOwner);
+
+            Proofs::<T>::insert(&claim, (dest, frame_system::Module::<T>::block_number()));
+
+            Self::deposit_event(RawEvent::ClaimTransfer(owner, claim, sender));
+
+            Ok(())
         }
     }
 }
