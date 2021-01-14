@@ -40,7 +40,7 @@ pub use frame_support::{
 
 /// Import the template pallet.
 pub use pallet_template;
-
+pub use pallet_kitties;
 /// An index to a block.
 pub type BlockNumber = u32;
 
@@ -308,8 +308,17 @@ impl pallet_template::Trait for Runtime {
 	type Event = Event;
 }
 
-impl pallet_poe::Trait for Runtime {
+parameter_types! {
+	// 质押 1000
+	pub const KittyReserve: u64 = 1_000;
+}
+
+impl pallet_kitties::Trait for Runtime {
 	type Event = Event;
+	type Randomness = RandomnessCollectiveFlip;
+	type KittyReserve = KittyReserve;
+	type Currency = Balances;
+
 }
 // Create the runtime by composing the FRAME pallets that were previously configured.
 construct_runtime!(
@@ -329,7 +338,7 @@ construct_runtime!(
 		// Include the custom logic from the template pallet in the runtime.
 		TemplateModule: pallet_template::{Module, Call, Storage, Event<T>},
 		Nicks: pallet_nicks::{Module, Call, Storage, Event<T>},
-		Poe:pallet_poe::{Module, Call, Storage, Event<T>},
+		Kitties:pallet_kitties::{Module, Call, Storage, Event<T>},
 		Scheduler: pallet_scheduler::{Module, Call, Storage, Event<T>},
 	}
 );
